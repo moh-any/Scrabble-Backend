@@ -1,6 +1,6 @@
 services:
   db:
-    container_name: "Scrabbledb"
+    container_name: "Scrabble-db"
     image: postgres:12.4-alpine
     volumes:
       - "./database/postgres-data:/var/lib/postgresql/data:rw"

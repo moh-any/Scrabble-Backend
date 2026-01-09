@@ -1,0 +1,121 @@
+package store
+
+import (
+	"database/sql"
+	"errors"
+	"time"
+
+	"golang.org/x/crypto/bcrypt"
+)
+
+type password struct {
+	plainText *string
+	hash      []byte
+}
+
+func Hash(plaintextPassword string) ([]byte, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(plaintextPassword), 12)
+	if err != nil {
+		return nil, err
+	}
+	return hash, nil
+}
+func (p *password) Set(plaintextPassword string) error {
+	hash, err := bcrypt.GenerateFromPassword([]byte(plaintextPassword), 12)
+	if err != nil {
+		return err
+	}
+
+	p.plainText = &plaintextPassword
+	p.hash = hash
+	return nil
+}
+
+func (p *password) Matches(plaintextPassword string) (bool, error) {
+	err := bcrypt.CompareHashAndPassword(p.hash, []byte(plaintextPassword))
+	if err != nil {
+		switch {
+		case errors.Is(err, bcrypt.ErrMismatchedHashAndPassword):
+			return false, nil
+		default:
+			return false, err
+		}
+	}
+
+	return true, nil
+}
+
+type User struct {
+	ID           int       `json:"id"`
+	UserName     string    `json:"username"`
+	Email        string    `json:"email"`
+	PasswordHash password  `json:"-"`
+	Bio          string    `json:"bio"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+var AnonymousUser = &User{}
+
+func (u *User) IsAnonymous() bool {
+	return u == AnonymousUser
+}
+
+type PostgresUserStore struct {
+	db *sql.DB
+}
+
+func NewPostgresUserStore(db *sql.DB) *PostgresUserStore {
+	return &PostgresUserStore{
+		db: db,
+	}
+}
+
+type UserStore interface {
+	CreateUser(user *User) error
+	GetUserByUserName(username string) (*User, error)
+	UpdateUser(user *User) error
+}
+
+func (pgus *PostgresUserStore) CreateUser(user *User) error {
+	query := "insert into users (username,email,password_hash,bio) values ($1,$2,$3,$4) returning id,created_at,updated_at"
+	err := pgus.db.QueryRow(query, user.UserName, user.Email, user.PasswordHash.hash, user.Bio).Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (pgus *PostgresUserStore) GetUserByUserName(username string) (*User, error) {
+	var user User
+	query := "select id,username,email,password_hash,bio,created_at,updated_at from users where username=$1"
+	err := pgus.db.QueryRow(query, username).Scan(
+		&user.ID,
+		&user.UserName,
+		&user.Email,
+		&user.PasswordHash.hash,
+		&user.Bio,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (pgus *PostgresUserStore) UpdateUser(user *User) error {
+	query := "update users set username=$1,email=$2,bio=$3,updated_at=CURRENT_TIMESTAMP where id=$4 returning updated_at"
+	res, err := pgus.db.Exec(query, user.UserName, user.Email, user.Bio, user.ID)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
