@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -46,11 +47,15 @@ func (p *password) Matches(plaintextPassword string) (bool, error) {
 }
 
 type User struct {
-	ID           int       `json:"id"`
+	ID           uuid.UUID `json:"id"`
 	UserName     string    `json:"username"`
 	Email        string    `json:"email"`
 	PasswordHash password  `json:"-"`
 	Bio          string    `json:"bio"`
+	TotalGames   int       `json:"total_games"`
+	Wins         int       `json:"wins"`
+	Losses       int       `json:"losses"`
+	Draws        int       `json:"draws"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
@@ -88,13 +93,17 @@ func (pgus *PostgresUserStore) CreateUser(user *User) error {
 
 func (pgus *PostgresUserStore) GetUserByUserName(username string) (*User, error) {
 	var user User
-	query := "select id,username,email,password_hash,bio,created_at,updated_at from users where username=$1"
+	query := "select id,username,email,password_hash,bio,total_games,wins,losses,draws,created_at,updated_at from users where username=$1"
 	err := pgus.db.QueryRow(query, username).Scan(
 		&user.ID,
 		&user.UserName,
 		&user.Email,
 		&user.PasswordHash.hash,
 		&user.Bio,
+		&user.TotalGames,
+		&user.Wins,
+		&user.Losses,
+		&user.Draws,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)

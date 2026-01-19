@@ -48,7 +48,6 @@ func (h *UserHandler) validateRegisterRequest(req *registerUserRequest) error {
 		return errors.New("invalid email format")
 	}
 
-	// we can have password validatoin aswell
 	if req.Password == "" {
 		return errors.New("password is required")
 	}

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"log"
@@ -44,7 +45,12 @@ func (h *TokenHandler) HandleCreateToken(w http.ResponseWriter, r *http.Request)
 	}
 
 	user, err := h.userStore.GetUserByUserName(req.Username)
-	if err != nil || user == nil {
+	if err == sql.ErrNoRows {
+		h.logger.Printf("Erro: GetUserByUsername: %v", err)
+		utils.WriteJson(w, http.StatusBadRequest, map[string]any{"error": "invalid user credintials"})
+		return
+	}
+	if err != nil {
 		h.logger.Printf("ERROR: GetUserByUsername: %v", err)
 		utils.WriteJson(w, http.StatusInternalServerError, map[string]any{"error": "internal server error"})
 		return

@@ -35,7 +35,8 @@ func NewApplication() (*Application, error) {
 	UserStore := store.NewPostgresUserStore(pgdb)
 
 	UserHandler := api.NewUserHandler(UserStore, logger)
-	TokenHandler := api.NewTokenHandler(UserStore, logger, "meow")
+	jwtSecret := os.Getenv("JWT_SECRET")
+	TokenHandler := api.NewTokenHandler(UserStore, logger, jwtSecret)
 	MiddleWareHandler := middleware.UserMiddleware{
 		UserStore: UserStore,
 	}

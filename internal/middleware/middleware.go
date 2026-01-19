@@ -43,7 +43,7 @@ func (um *UserMiddleware) Authenticate(next http.Handler) http.Handler {
 			return
 		}
 
-		headerParts := strings.Split(authHeader, " ") // Bearer <TOKEN>
+		headerParts := strings.Split(authHeader, " ")
 		if len(headerParts) != 2 || headerParts[0] != "Bearer" {
 			utils.WriteJson(w, http.StatusUnauthorized, map[string]any{"error": "invalid authorization header"})
 			return

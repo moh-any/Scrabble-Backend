@@ -1,19 +1,21 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"net/http"
+	"os"
+	"strconv"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/moh-any/Scrabble-Backend/internal/app"
 	"github.com/moh-any/Scrabble-Backend/internal/routes"
 )
 
 func main() {
-	var port int
-	flag.IntVar(&port, "port", 8080, "port for API")
-	flag.Parse()
+	godotenv.Load()
+	portString := os.Getenv("API_PORT")
+	port, err := strconv.ParseInt(portString, 10, 64)
 	app, err := app.NewApplication()
 	if err != nil {
 		panic(err)
