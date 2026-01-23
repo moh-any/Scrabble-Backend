@@ -11,7 +11,7 @@ struct Move{
     string word;
     bool isHorizontal;
     int score;
-    vector<int> planks; // list of indicies in the string "word" where characters were plank
+    vector<int> blanks;
 };
 
 class Board{
@@ -27,16 +27,16 @@ class Board{
         void calculateCrossChecks();
         void calculateAnchors();
         void calculateCrossScores();
-        void LeftPart(int r,int c,string word,vector<int> &rack,int blanks,int limit,vector<Move> &res,int score,int mult,int corss_sum,int tile_placed);
-        void ExtendRight(int r,int c,string word,vector<int> &rack,int blanks,vector<Move> &res,int score,int mult,int corss_sum,int tile_placed);    
+        void LeftPart(int r,int c,string word,vector<int> &rack,int blanks,int limit,vector<Move> &res,int score,int mult,int corss_sum,int tile_placed,vector<int> blanks_used);
+        void ExtendRight(int r,int c,string word,vector<int> &rack,int blanks,vector<Move> &res,int score,int mult,int corss_sum,int tile_placed,vector<int> blanks_used);    
         void Solve(string rack,vector<Move> &Moves);
         void Transpose();
     public:
         Board(Dict* dictionary);
         void Precompute();
-        std::pair<bool,string> IsValidMove(std::vector<std::tuple<int,int,char>> move);
-        int GetMoveScore(std::vector<std::tuple<int,int,char>> move);
-        void PlaceMove(std::vector<std::tuple<int,int,char>> move);
+        std::pair<bool,string> IsValidMove(Move move);
+        int GetMoveScore(Move move);
+        void PlaceMove(Move move);
         bool IsAnchor(int r,int c);
         char GetTile(int r,int c);
         bool IsvalidVertical(int r,int c,char letter);
@@ -53,6 +53,7 @@ Board::Board(Dict* dictionary):dict(dictionary){
             is_anchor[i][j]=false;
             cross_checks[i][j].reset();
             mul[i][j]=NONE;
+            was_blank[i][j]=false;
         }
     }
     // put the multipliers
@@ -186,13 +187,25 @@ void Board::calculateCrossScores(){
 void Board::print(){
     for(int i=0; i<sz; ++i){
         for(int j=0; j<sz; ++j){
-            std::cout << tiles[i][j] << ' ';
+            std::cout << (char)(!was_blank[i][j]?tiles[i][j]-'a'+'A':tiles[i][j]) << ' ';
         }
         std::cout << std::endl;
     }
 }
 
-std::pair<bool,string> Board::IsValidMove(std::vector<std::tuple<int,int,char>> move){
+std::pair<bool,string> Board::IsValidMove(Move mv){
+    std::vector<std::tuple<int,int,char>> move;
+    for(int i=0; i<mv.word.length(); ++i){
+        int r=mv.r;
+        int c=mv.c;
+        if(mv.isHorizontal){
+            c+=i;
+        }
+        else{
+            r+=i;
+        }
+        if(tiles[r][c]!=' ' && tiles[r][c]!=mv.word[i]) move.push_back({r,c,mv.word[i]});
+    }
     // validates player moves
     if(move.size()==0) return {false,"Empty move"};
     // sort moves by row and column
@@ -356,9 +369,20 @@ std::pair<bool,string> Board::IsValidMove(std::vector<std::tuple<int,int,char>> 
     return {true,mainWord};
 }
 
-void Board::PlaceMove(std::vector<std::tuple<int,int,char>> move){
-    for(auto&[r,c,l]:move){
-        tiles[r][c]=l;
+void Board::PlaceMove(Move move){
+    for(int i=0; i<move.word.length(); ++i){
+        int r=move.r;
+        int c=move.c;
+        if(move.isHorizontal){
+            c+=i;
+        }
+        else{
+            r+=i;
+        }
+        if(tiles[r][c]==' '){
+            tiles[r][c]=move.word[i];
+            was_blank[r][c]=(std::find(move.blanks.begin(),move.blanks.end(),i)!=move.blanks.end());
+        }
     }
     calculateAnchors();
     calculateCrossChecks();
@@ -371,7 +395,34 @@ void Board::Precompute(){
     calculateCrossScores();
 }
 
-int Board::GetMoveScore(std::vector<std::tuple<int,int,char>> move){
+int Board::GetMoveScore(Move mv){
+    std::vector<std::tuple<int,int,char>> move;
+    for(int i=0; i<mv.word.length(); ++i){
+        int r=mv.r;
+        int c=mv.c;
+        if(mv.isHorizontal){
+            c+=i;
+        }
+        else{
+            r+=i;
+        }
+        if(tiles[r][c]==' '){
+            move.push_back({r,c,mv.word[i]});
+        }
+    }
+    vector<std::pair<int,int>> blanks;
+    for(int i=0; i<mv.blanks.size(); ++i){
+        int idx=mv.blanks[i];
+        int r=mv.r;
+        int c=mv.c;
+        if(mv.isHorizontal){
+            c+=idx;
+        }
+        else{
+            r+=idx;
+        }
+        blanks.push_back({r,c});
+    }
     sort(move.begin(),move.end(),[](auto a, auto b){
         if(std::get<0>(a)==std::get<0>(b))
         return std::get<1>(a)<std::get<1>(b);
@@ -410,7 +461,9 @@ int Board::GetMoveScore(std::vector<std::tuple<int,int,char>> move){
                     }
                 }
                 if(isNewTile){
-                    int letterScore=letterPoints[letter-'a'];
+                    int letterScore=0;
+                    if(std::find(blanks.begin(),blanks.end(),std::make_pair(r,col))!=blanks.end()) letterScore=0;
+                    else letterScore=letterPoints[letter-'a'];
                     Multiplier m=mul[r][col];
                     if(m==DL) letterScore*=2;
                     else if(m==TL) letterScore*=3;
@@ -419,7 +472,7 @@ int Board::GetMoveScore(std::vector<std::tuple<int,int,char>> move){
                     wordScore+=letterScore;
                 }
                 else{
-                    wordScore+=letterPoints[tiles[r][col]-'a'];
+                    if(!was_blank[r][col]) wordScore+=letterPoints[tiles[r][col]-'a'];
                 }
             }
             totalScore+=wordScore*wordMultiplier;
@@ -455,7 +508,9 @@ int Board::GetMoveScore(std::vector<std::tuple<int,int,char>> move){
                     }
                 }
                 if(isNewTile){
-                    int letterScore=letterPoints[letter-'a'];
+                    int letterScore=0;
+                    if(std::find(blanks.begin(),blanks.end(),std::make_pair(row,c))!=blanks.end()) letterScore=0;
+                    else letterScore=letterPoints[letter-'a'];
                     Multiplier m=mul[row][c];
                     if(m==DL) letterScore*=2;
                     else if(m==TL) letterScore*=3;
@@ -464,7 +519,7 @@ int Board::GetMoveScore(std::vector<std::tuple<int,int,char>> move){
                     wordScore+=letterScore;
                 }
                 else{
-                    wordScore+=letterPoints[tiles[row][c]-'a'];
+                    if(!was_blank[row][c]) wordScore+=letterPoints[tiles[row][c]-'a'];
                 }
             }
             totalScore+=wordScore*wordMultiplier;
@@ -490,7 +545,9 @@ int Board::GetMoveScore(std::vector<std::tuple<int,int,char>> move){
                 int wordScore=0;
                 for(int row=startR; row<=endR; ++row){
                     if(row==r){
-                        int letterScore=letterPoints[l-'a'];
+                        int letterScore=0;
+                        if(std::find(blanks.begin(),blanks.end(),std::make_pair(r,c))!=blanks.end()) letterScore=0;
+                        else letterScore=letterPoints[l-'a'];
                         Multiplier m=mul[r][c];
                         if(m==DL) letterScore*=2;
                         else if(m==TL) letterScore*=3;
@@ -499,7 +556,7 @@ int Board::GetMoveScore(std::vector<std::tuple<int,int,char>> move){
                         wordScore+=letterScore;
                     }
                     else{
-                        wordScore+=letterPoints[tiles[row][c]-'a'];
+                        if(!was_blank[row][c]) wordScore+=letterPoints[tiles[row][c]-'a'];
                     }
                 }
                 totalScore+=wordScore*wordMultiplier;
@@ -523,7 +580,9 @@ int Board::GetMoveScore(std::vector<std::tuple<int,int,char>> move){
                 int wordScore=0;
                 for(int col=startC; col<=endC; ++col){
                     if(col==c){
-                        int letterScore=letterPoints[l-'a'];
+                        int letterScore=0;
+                        if(std::find(blanks.begin(),blanks.end(),std::make_pair(r,c))!=blanks.end()) letterScore=0;
+                        else letterScore=letterPoints[l-'a'];
                         Multiplier m=mul[r][c];
                         if(m==DL) letterScore*=2;
                         else if(m==TL) letterScore*=3;
@@ -532,7 +591,7 @@ int Board::GetMoveScore(std::vector<std::tuple<int,int,char>> move){
                         wordScore+=letterScore;
                     }
                     else{
-                        wordScore+=letterPoints[tiles[r][col]-'a'];
+                        if(!was_blank[r][col]) wordScore+=letterPoints[tiles[r][col]-'a'];
                     }
                 }
                 totalScore+=wordScore*wordMultiplier;
@@ -557,15 +616,15 @@ void Board::Solve(string rack,vector<Move> &Moves){
             while(c-limit>0 && tiles[r][c-limit-1]==' ' && limit<rack.size()) limit++;
             
             for(int lim=0; lim<=limit; ++lim){
-                LeftPart(r,c,"",rackTiles,blanks,lim,Moves,0,1,0,0);
+                LeftPart(r,c,"",rackTiles,blanks,lim,Moves,0,1,0,0,{});
             }
         }
     }
 }
 
-void Board::LeftPart(int r,int c,string word,vector<int> &rackTiles,int blanks,int limit,vector<Move> &res,int score,int mult,int cross_sum,int tile_placed){
+void Board::LeftPart(int r,int c,string word,vector<int> &rackTiles,int blanks,int limit,vector<Move> &res,int score,int mult,int cross_sum,int tile_placed,vector<int> blanks_used){
     if(limit==0){
-        ExtendRight(r,c,word,rackTiles,blanks,res,score,mult,cross_sum,tile_placed);
+        ExtendRight(r,c,word,rackTiles,blanks,res,score,mult,cross_sum,tile_placed,blanks_used);
         return;
     }
 
@@ -595,30 +654,32 @@ void Board::LeftPart(int r,int c,string word,vector<int> &rackTiles,int blanks,i
 
         if(!usedBlank){
             rackTiles[i]--;
-            LeftPart(r,c,word+(char)('a'+i),rackTiles,blanks,limit-1,res,score+letterScore,nextMul,cross_sum+crossScore,tile_placed+1);
+            LeftPart(r,c,word+(char)('a'+i),rackTiles,blanks,limit-1,res,score+letterScore,nextMul,cross_sum+crossScore,tile_placed+1,blanks_used);
             rackTiles[i]++;
         }
         else{
-            LeftPart(r,c,word+(char)('a'+i),rackTiles,blanks-1,limit-1,res,score+letterScore,nextMul,cross_sum+crossScore,tile_placed+1);
+            vector<int> nbu=blanks_used;
+            nbu.push_back(word.length());
+            LeftPart(r,c,word+(char)('a'+i),rackTiles,blanks-1,limit-1,res,score+letterScore,nextMul,cross_sum+crossScore,tile_placed+1,nbu);
         }
     }
 }
 
-void Board::ExtendRight(int r,int c,string word,vector<int> &rackTiles,int blanks,vector<Move> &res,int score,int mult,int cross_sum,int tile_placed){
+void Board::ExtendRight(int r,int c,string word,vector<int> &rackTiles,int blanks,vector<Move> &res,int score,int mult,int cross_sum,int tile_placed,vector<int> blanks_used){
     if(!dict->isPrefix(word)) return;
 
     if(c>=sz){
         if(dict->isValidWord(word) && tile_placed>0){
             int totalScore=(score*mult)+cross_sum;
             if(tile_placed==7) totalScore+=50;
-            res.push_back(Move{r,c-(int)word.length(),word,true,totalScore});
+            res.push_back(Move{r,c-(int)word.length(),word,true,totalScore,blanks_used});
         }
         return;
     }
 
     if(tiles[r][c]!=' '){
         if(dict->isPrefix(word+tiles[r][c])){
-            ExtendRight(r,c+1,word+tiles[r][c],rackTiles,blanks,res,score+letterPoints[tiles[r][c]-'a'],mult,cross_sum,tile_placed);
+            ExtendRight(r,c+1,word+tiles[r][c],rackTiles,blanks,res,score+(was_blank[r][c]?0:letterPoints[tiles[r][c]-'a']),mult,cross_sum,tile_placed,blanks_used);
         }
         return;
     }
@@ -626,7 +687,7 @@ void Board::ExtendRight(int r,int c,string word,vector<int> &rackTiles,int blank
     if(dict->isValidWord(word) && tile_placed>0){
         int totalScore=(score*mult)+cross_sum;
         if(tile_placed==7) totalScore+=50;
-        res.push_back(Move{r,c-(int)word.length(),word,true,totalScore});
+        res.push_back(Move{r,c-(int)word.length(),word,true,totalScore,blanks_used});
     }
 
     for(int i=0; i<26; ++i){
@@ -654,11 +715,13 @@ void Board::ExtendRight(int r,int c,string word,vector<int> &rackTiles,int blank
 
         if(!usedBlank){
             rackTiles[i]--;
-            ExtendRight(r,c+1,word+(char)('a'+i),rackTiles,blanks,res,score+letterScore,nextMul,cross_sum+crossScore,tile_placed+1);
+            ExtendRight(r,c+1,word+(char)('a'+i),rackTiles,blanks,res,score+letterScore,nextMul,cross_sum+crossScore,tile_placed+1,blanks_used);
             rackTiles[i]++;
         }
         else{
-            ExtendRight(r,c+1,word+(char)('a'+i),rackTiles,blanks-1,res,score+letterScore,nextMul,cross_sum+crossScore,tile_placed+1);
+            vector<int> nbu=blanks_used;
+            nbu.push_back(word.length());
+            ExtendRight(r,c+1,word+(char)('a'+i),rackTiles,blanks-1,res,score+letterScore,nextMul,cross_sum+crossScore,tile_placed+1,nbu);
         }
     }
 }
@@ -668,6 +731,7 @@ void Board::Transpose(){
         for(int j=i+1; j<sz; ++j){
             std::swap(tiles[i][j],tiles[j][i]);
             std::swap(mul[i][j],mul[j][i]);
+            std::swap(was_blank[i][j],was_blank[j][i]);
         }
     }
 }
